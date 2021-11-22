@@ -1,0 +1,88 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: "Lambda"
+Resources: 
+
+  iamRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: SSM
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: "ssm:GetParameter"
+                Resource: "arn:aws:ssm:*:*:parameter/UserName"
+        - PolicyName: S3
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: "s3:PutObject"
+                Resource: "arn:aws:s3:::*/*"
+        - PolicyName: cloudwatchLog
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: "logs:CreateLogGroup"
+                Resource:  "arn:aws:logs:*:*:*"
+              - Effect: Allow
+                Action: 
+                - "logs:CreateLogStream"
+                - "logs:PutLogEvents"
+                Resource:  "arn:aws:logs:*:*:log-group:/aws/lambda/exercise-lambda:*"
+
+  logLogGroup:
+    Type: AWS::Logs::LogGroup
+    DependsOn:
+      - lambdaFunction
+    Properties:
+      LogGroupName: /aws/lambda/exercise-lambda
+
+  lambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: "exercise-lambda"
+      FunctionName: "exercise-lambda"
+      Handler: index.lambda_handler
+      MemorySize: 128
+      Runtime:  python3.9
+      Timeout: 15
+      Role: !GetAtt iamRole.Arn
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+
+          ssmclient = boto3.client('ssm')
+          BUCKET_NAME = 'yaml'
+          PREFIX = 'parameterstore'
+
+          s3 = boto3.resource('s3')
+
+
+          def lambda_handler(event, context):
+              response = ssmclient.get_parameter(
+                  Name='UserName',
+              ) 
+              content = response['Parameter'].get('Name') + ":" + response['Parameter'].get('Value')
+              
+              obj = s3.Object(BUCKET_NAME, PREFIX + 'pass.txt')
+              obj.put(Body=content)
+              
+              return
+
+
+
+# aws cloudformation create-stack --capabilities CAPABILITY_NAMED_IAM
